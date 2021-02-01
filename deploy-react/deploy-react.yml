@@ -1,0 +1,54 @@
+name: build
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1
+      - name: Use Node.js 12.6
+        uses: actions/setup-node@v1
+        with:
+          node-version: '12.6'
+      - name: Install yarn
+        run: |
+          yarn
+        env:
+          CI: true
+      - name: Publish to Github Packages Registry
+        uses: elgohr/Publish-Docker-Github-Action@master
+        with:
+          name: github-nickname/repo-name
+          registry: ghcr.io
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.CR_PAT }}
+          dockerfile: Dockerfile
+          tags: latest
+      - name: Deploy package to digitalocean
+        uses: appleboy/ssh-action@master
+        env:
+          GITHUB_USERNAME: ${{ secrets.USERNAME }}
+          CR_PAT: ${{ secrets.CR_PAT }}
+          DOCKER_PORT: 3000
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.DROPLET_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.PORT }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          envs: GITHUB_USERNAME, CR_PAT, DOCKER_PORT
+          script: |
+            docker login ghcr.io -u $GITHUB_USERNAME -p $CR_PAT
+            docker stop $(docker ps -a -q -f publish=$DOCKER_PORT)
+            docker pull ghcr.io/github-nickname/repo-name:latest
+            docker run -dit -p $DOCKER_PORT:80 ghcr.io/github-nickname/repo-name:latest
+      - name: Discord notification
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        uses: Ilshidur/action-discord@master
+        with:
+          args: ':ok_hand: **{{ EVENT_PAYLOAD.repository.full_name }}** has been successfully deployed'

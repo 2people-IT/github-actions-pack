@@ -1,0 +1,15 @@
+name: discord-notify
+
+on:
+  push
+
+jobs:
+  notify-discord:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Discord notification
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        uses: Ilshidur/action-discord@master
+        with:
+          args: ':arrow_heading_up: PR {{ EVENT_PAYLOAD.action }} on **{{ EVENT_PAYLOAD.repository.full_name }}**: {{ EVENT_PAYLOAD.pull_request.html_url }}'
