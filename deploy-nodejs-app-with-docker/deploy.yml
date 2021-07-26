@@ -1,0 +1,51 @@
+name: CI CD
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v1
+
+      - name: Publish to Github Packages Registry
+        uses: elgohr/Publish-Docker-Github-Action@master
+        with:
+          name: github-nickname/repo-name
+          registry: ghcr.io
+          username: ${{ secrets.GH_USERNAME }}
+          password: ${{ secrets.GH_CR_PAT }}
+          dockerfile: Dockerfile
+          tags: latest
+
+      - name: Deploy package
+        uses: appleboy/ssh-action@master
+        env:
+          GITHUB_USERNAME: ${{ secrets.GH_USERNAME }}
+          GITHUB_CR_PAT: ${{ secrets.GH_CR_PAT }}
+          DOCKER_PORT: ${{ secrets.DOCKER_PORT }}
+          NODE_APP_PORT: ${{ secrets.NODE_APP_PORT }}
+          CUSTOM_ENV: ${{ secrets.CUSTOM_ENV }}
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USERNAME }}
+          password: ${{ secrets.REMOTE_PASSWORD }}
+          port: ${{ secrets.REMOTE_PORT }}
+          envs: GITHUB_USERNAME, GITHUB_CR_PAT, DOCKER_PORT, NODE_APP_PORT, CUSTOM_ENV
+          script: |
+            docker login ghcr.io -u $GITHUB_USERNAME -p $GITHUB_CR_PAT
+            docker stop $(docker ps -a -q -f ancestor=ghcr.io/github-nickname/repo-name:latest)
+            docker rm -f custom-container-name
+            docker pull ghcr.io/github-nickname/repo-name:latest
+            docker run --name custom-container-name -dit -p $DOCKER_PORT:$NODE_APP_PORT -e CUSTOM_ENV=$CUSTOM_ENV -e ghcr.io/github-nickname/repo-name:latest
+
+      - name: Discord notification
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        uses: Ilshidur/action-discord@master
+        with:
+          args: ':ok_hand: **{{ EVENT_PAYLOAD.repository.full_name }}** has been successfully deployed by: {{EVENT_PAYLOAD.head_commit.author.username}} - {{EVENT_PAYLOAD.head_commit.author.email}} with head commit: **{{EVENT_PAYLOAD.head_commit.message}}** at: {{EVENT_PAYLOAD.head_commit.timestamp}}'
