@@ -44,11 +44,12 @@ jobs:
           script: |
             docker login ghcr.io -u $GITHUB_USERNAME -p $CR_PAT
             docker stop $(docker ps -a -q -f publish=$DOCKER_PORT)
+            docker rm -f custom-container-name
             docker pull ghcr.io/github-nickname/repo-name:latest
-            docker run -dit -p $DOCKER_PORT:80 ghcr.io/github-nickname/repo-name:latest
+            docker run --name custom-container-name -dit -p $DOCKER_PORT:80 ghcr.io/github-nickname/repo-name:latest
       - name: Discord notification
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
         uses: Ilshidur/action-discord@master
         with:
-          args: ':ok_hand: **{{ EVENT_PAYLOAD.repository.full_name }}** has been successfully deployed'
+          args: ':ok_hand: **{{ EVENT_PAYLOAD.repository.full_name }}** has been successfully deployed by: {{EVENT_PAYLOAD.head_commit.author.username}} - {{EVENT_PAYLOAD.head_commit.author.email}} with head commit: **{{EVENT_PAYLOAD.head_commit.message}}** at: {{EVENT_PAYLOAD.head_commit.timestamp}}'
