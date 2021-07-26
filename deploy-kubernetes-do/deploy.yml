@@ -1,0 +1,58 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: Build, push, and deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Build container image
+        run: docker build -t ghcr.io/github-nickname/repo-name:$(echo $GITHUB_SHA | head -c7) .
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GH_USERNAME  }}
+          password: ${{ secrets.GH_CR_PAT }}
+
+      - name: Push image to Docker Hub
+        run: docker push --all-tags ghcr.io/github-nickname/repo-name
+
+      - name: Update deployment file
+        run: TAG=$(echo $GITHUB_SHA | head -c7) && sed -i 's|<IMAGE>|ghcr.io/github-nickname/repo-name:'${TAG}'|' $GITHUB_WORKSPACE/config/deployment.yml
+
+      - name: Save DigitalOcean kubeconfig
+        run: doctl kubernetes cluster kubeconfig save $CLUSTER_NAME
+        env:
+          CLUSTER_NAME: ${{ secrets.CLUSTER_NAME }}
+
+      - name: Update regcred secret
+        run: kubectl delete secret regcred --ignore-not-found && kubectl create secret docker-registry regcred --docker-server=https://ghcr.io/ --docker-username=${{ secrets.GH_USERNAME }} --docker-password=${{ secrets.GH_CR_PAT }}
+
+      - name: Update custom-env-secret secret
+        run: kubectl delete secret custom-env-secret --ignore-not-found && kubectl create secret generic custom-env-secret --from-literal=CUSTOM_ENV='${{ secrets.CUSTOM_ENV }}'
+
+      - name: Deploy to Kubernetes
+        run: kubectl apply -f $GITHUB_WORKSPACE/config/deployment.yml
+
+      - name: Verify deployment
+        run: kubectl rollout status deployment/custom-service-name
+
+      - name: Discord notification
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        uses: Ilshidur/action-discord@master
+        with:
+          args: ':ok_hand: **{{ EVENT_PAYLOAD.repository.full_name }}** **prod** has been successfully deployed by: {{EVENT_PAYLOAD.head_commit.author.username}} - {{EVENT_PAYLOAD.head_commit.author.email}} with head commit: **{{EVENT_PAYLOAD.head_commit.message}}** at: {{EVENT_PAYLOAD.head_commit.timestamp}}'

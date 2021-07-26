@@ -1,0 +1,39 @@
+name: Initialize cert-manager
+
+on:
+  push:
+    paths:
+      - .github/workflows/deployCertManager.yml
+      - config/cert-issuer.yml
+      - config/ingress.yml
+
+jobs:
+  build:
+    name: Install cert-manager
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout master
+        uses: actions/checkout@master
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Save digitalocean kubeconfig
+        run: doctl kubernetes cluster kubeconfig save $CLUSTER_NAME
+        env:
+          CLUSTER_NAME: ${{ secrets.CLUSTER_NAME }}
+
+      - name: Get ingress-nginx
+        run: kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v0.34.1/deploy/static/provider/do/deploy.yaml
+
+      - name: Get cert-manager v1.4.0
+        run: kubectl apply -f https://github.com/jetstack/cert-manager/releases/download/v1.4.0/cert-manager.yaml
+
+      - name: Apply cert-issuer
+        run: kubectl apply -f $GITHUB_WORKSPACE/config/cert-issuer.yml
+
+      - name: Apply ingress
+        run: kubectl apply -f $GITHUB_WORKSPACE/config/ingress.yml
