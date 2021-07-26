@@ -1,0 +1,38 @@
+name: Dev deploy
+
+on:
+  push:
+    branches:
+      - dev
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '14'
+          cache: 'npm'
+
+      - name: npm install
+        run: npm install
+
+      # custom node script generate documentation folder 'docs' in root
+      - name: npm run docs
+        run: npm run docs
+
+      - name: copy file via ssh password
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.DEV_REMOTE_HOST }}
+          username: ${{ secrets.DEV_REMOTE_USERNAME }}
+          password: ${{ secrets.DEV_REMOTE_PASSWORD }}
+          port: ${{ secrets.DEV_REMOTE_PORT }}
+          # rm => remove all from 'target' folder
+          rm: true
+          # sourse => documentation folder 'docs' created before
+          source: "docs"
+          # target => folder at remote server, ~ cause home/user/
+          target: "~/custom-folder"
+          strip_components: 1
